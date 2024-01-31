@@ -32,7 +32,7 @@ public class CrptApi {
             oldestRequest = requests.peek();
         }
         if (requests.remainingCapacity() == 0) {
-            requests.take(); // blocks if queue is full
+            requests.take();
         }
         requests.put(currentTimeMillis);
     }
