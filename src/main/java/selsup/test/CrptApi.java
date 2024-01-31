@@ -1,6 +1,8 @@
 package selsup.test;
 
 import com.google.gson.Gson;
+import com.google.gson.JsonParseException;
+import com.google.gson.JsonSyntaxException;
 
 import java.io.IOException;
 import java.net.URI;
@@ -37,7 +39,9 @@ public class CrptApi {
         requests.put(currentTimeMillis);
     }
 
-    public String createDocument(Document document, String signature) throws IOException, InterruptedException {
+    public String createDocument(Document document, String signature)
+            throws IOException, InterruptedException, JsonSyntaxException {
+
         allowRequest();
 
         Gson gson = new Gson();
