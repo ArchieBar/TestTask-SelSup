@@ -16,14 +16,12 @@ import java.util.concurrent.TimeUnit;
 
 public class CrptApi {
     private final TimeUnit timeUnit;
-    private final int requestLimit;
     private transient final BlockingQueue<Long> requests; // Очередь для хранения времени каждого запроса
     private final HttpClient client;
     private final Gson gson;
 
     public CrptApi(TimeUnit timeUnit, int requestLimit) {
         this.timeUnit = timeUnit;
-        this.requestLimit = requestLimit;
         this.requests = new LinkedBlockingQueue<>(requestLimit); // Инициализация очереди с заданным лимитом
         this.client = HttpClient.newHttpClient();
         this.gson = new Gson();
