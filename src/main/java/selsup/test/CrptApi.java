@@ -246,6 +246,7 @@ public class CrptApi {
         }
 
         static class Description {
+            @SerializedName("participant_inn")
             private String participantInn;
 
             public Description(String participantInn) {
