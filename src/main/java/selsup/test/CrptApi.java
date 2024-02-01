@@ -16,12 +16,14 @@ import java.util.concurrent.TimeUnit;
 
 public class CrptApi {
     private final TimeUnit timeUnit;
+    private final int requestLimit;
     private transient final BlockingQueue<Long> requests; // Очередь для хранения времени каждого запроса
     private final HttpClient client;
     private final Gson gson;
 
     public CrptApi(TimeUnit timeUnit, int requestLimit) {
         this.timeUnit = timeUnit;
+        this.requestLimit = requestLimit;
         this.requests = new LinkedBlockingQueue<>(requestLimit); // Инициализация очереди с заданным лимитом
         this.client = HttpClient.newHttpClient();
         this.gson = new Gson();
@@ -31,38 +33,58 @@ public class CrptApi {
     private void isRequestNumberExeeded() throws InterruptedException {
         long currentTimeMillis = System.currentTimeMillis();
         long periodToCheck = timeUnit.toMillis(1);
-        Long oldestRequest;
 
         synchronized (requests) {
-            oldestRequest = requests.peek();
+            Long oldestRequest = requests.poll();
             while (oldestRequest != null && currentTimeMillis - oldestRequest > periodToCheck) {
-                requests.remove();
-                oldestRequest = requests.peek();
+                oldestRequest = requests.poll();
             }
-            if (requests.remainingCapacity() == 0) {
-                throw new InterruptedException("Rate limit exceeded");
+            if (oldestRequest != null && currentTimeMillis - oldestRequest <= periodToCheck) {
+                requests.offer(oldestRequest); // Возвращаем элемент обратно, если он ещё валиден
+            }
+            while (requests.remainingCapacity() == 0) {
+                Thread.sleep(100); // ждем некоторое время, пока не освободится место в очереди
+                oldestRequest = requests.poll();
+                while (oldestRequest != null && currentTimeMillis - oldestRequest > periodToCheck) {
+                    oldestRequest = requests.poll();
+                }
+                if (oldestRequest != null && currentTimeMillis - oldestRequest <= periodToCheck) {
+                    requests.offer(oldestRequest); // Возвращаем элемент обратно, если он ещё валиден
+                }
             }
             requests.put(currentTimeMillis); // Добавление времени запроса в очередь
         }
     }
 
-    public String createDocument(Document document, String signature)
-            throws IOException, InterruptedException, JsonSyntaxException {
+    public String createDocument(Document document, String signature) {
+        try {
+            // Проверка, не превышено ли число запросов
+            isRequestNumberExeeded();
+                String documentJson = gson.toJson(document);
 
-        isRequestNumberExeeded(); // Проверка, не превышено ли число запросов
+                HttpRequest request = HttpRequest.newBuilder()
+                        .uri(URI.create("https://ismp.crpt.ru/api/v3/lk/documents/create"))
+                        .header("Content-Type", "application/json")
+                        .header("Signature", signature)
+                        .POST(HttpRequest.BodyPublishers.ofString(documentJson))
+                        .build();
 
-        String documentJson = gson.toJson(document);
+                HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
 
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create("https://ismp.crpt.ru/api/v3/lk/documents/create"))
-                .header("Content-Type", "application/json")
-                .header("Signature", signature)
-                .POST(HttpRequest.BodyPublishers.ofString(documentJson))
-                .build();
-
-        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-
-        return response.body();
+                return response.body();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+            return "Произошла ошибка при ожидании отправки запроса, попробуйте снова.";
+        } catch (IOException e) {
+            e.printStackTrace();
+            return "Произошла ошибка при отправке запроса, попробуйте снова.";
+        } catch (JsonSyntaxException e) {
+            e.printStackTrace();
+            return "Произошла ошибка при преобразовании документа в JSON, проверьте входные данные.";
+        } catch (Exception e) {
+            e.printStackTrace();
+            return "Неизвестная ошибка, попробуйте снова.";
+        }
     }
 
     static class Document {
